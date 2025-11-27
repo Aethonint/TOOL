@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
-// Define the interface for Type Safety
 interface Product {
   id: number;
   sku: string;
@@ -18,26 +17,43 @@ interface Product {
 export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // PAGINATION STATE
+  const [currentPage, setCurrentPage] = useState(1);
+  const [lastPage, setLastPage] = useState(1);
 
-  useEffect(() => {
-    // 1. Fetch from your Laravel API
-    fetch("http://127.0.0.1:8000/api/products")
+  // FETCH FUNCTION
+  const fetchProducts = (page: number) => {
+    setLoading(true);
+    // Append ?page=X to the URL
+    fetch(`http://127.0.0.1:8000/api/products?page=${page}`)
       .then((res) => {
-        if (!res.ok) {
-          throw new Error("Network response was not ok");
-        }
+        if (!res.ok) throw new Error("Failed");
         return res.json();
       })
       .then((data) => {
-        // 2. Laravel Pagination Handling
-        const productList = data.data ? data.data : data;
-        setProducts(productList);
+        // Laravel Pagination Response Structure:
+        // data.data = Array of products
+        // data.last_page = Total number of pages
+        // data.current_page = Current page number
+        
+        setProducts(data.data || []);
+        setLastPage(data.last_page || 1);
+        setCurrentPage(data.current_page || 1);
         setLoading(false);
+        
+        // Scroll to top when page changes
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       })
       .catch((error) => {
-        console.error("Error fetching products:", error);
+        console.error("Error:", error);
         setLoading(false);
       });
+  };
+
+  // Initial Load
+  useEffect(() => {
+    fetchProducts(1);
   }, []);
 
   return (
@@ -54,7 +70,6 @@ export default function Home() {
             height={20}
             priority
           />
-
           <h1 className="text-4xl font-bold tracking-tight text-black dark:text-zinc-50 mb-4">
             Explore Our Greeting Cards
           </h1>
@@ -63,9 +78,9 @@ export default function Home() {
           </p>
         </div>
 
-        {/* LOADING */}
+        {/* LOADING STATE */}
         {loading && (
-          <div className="flex justify-center items-center py-20">
+          <div className="flex justify-center items-center py-20 min-h-[400px]">
             <p className="text-xl font-semibold dark:text-white animate-pulse">
               Loading products...
             </p>
@@ -87,7 +102,6 @@ export default function Home() {
                     alt={product.title}
                     className="w-full h-full object-cover object-center transition-transform duration-300 group-hover:scale-105"
                   />
-
                   <span className="absolute top-2 left-2 rounded-full bg-black/70 px-3 py-1 text-xs font-medium text-white backdrop-blur-sm">
                     {product.type === "fixed" ? "Ready-made" : "Customizable"}
                   </span>
@@ -98,26 +112,11 @@ export default function Home() {
                   <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 truncate">
                     {product.title}
                   </h3>
-
-                  {/* Price */}
                   <div className="mt-2 flex items-center gap-2">
-                    {product.discount_price ? (
-                      <>
-                        <span className="text-lg font-bold text-red-600">
-                          £{parseFloat(product.discount_price).toFixed(2)}
-                        </span>
-                        <span className="text-sm text-zinc-500 line-through">
-                          £{parseFloat(product.price).toFixed(2)}
-                        </span>
-                      </>
-                    ) : (
-                      <span className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
-                        £{parseFloat(product.price).toFixed(2)}
-                      </span>
-                    )}
+                    <span className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
+                      £{parseFloat(product.price).toFixed(2)}
+                    </span>
                   </div>
-
-                  {/* Button: View Details Only */}
                   <div className="mt-auto pt-4">
                     <Link
                       href={`/products/${product.sku}`}
@@ -132,15 +131,43 @@ export default function Home() {
           </div>
         )}
 
-        {/* EMPTY STATE */}
-        {!loading && products.length === 0 && (
-          <div className="text-center py-20">
-            <h2 className="text-xl font-medium dark:text-white">No products found.</h2>
-            <p className="text-zinc-500 mt-2">
-              Add some products in your Laravel admin panel.
-            </p>
+        {/* PAGINATION CONTROLS */}
+        {!loading && products.length > 0 && (
+          <div className="mt-16 flex items-center justify-center gap-4">
+            
+            {/* Previous Button */}
+            <button
+              onClick={() => fetchProducts(currentPage - 1)}
+              disabled={currentPage === 1}
+              className={`px-4 py-2 rounded-lg font-semibold border ${
+                currentPage === 1 
+                  ? "bg-zinc-100 text-zinc-400 border-zinc-200 cursor-not-allowed" 
+                  : "bg-white text-zinc-900 border-zinc-300 hover:bg-zinc-50"
+              }`}
+            >
+              ← Previous
+            </button>
+
+            <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+              Page {currentPage} of {lastPage}
+            </span>
+
+            {/* Next Button */}
+            <button
+              onClick={() => fetchProducts(currentPage + 1)}
+              disabled={currentPage === lastPage}
+              className={`px-4 py-2 rounded-lg font-semibold border ${
+                currentPage === lastPage 
+                  ? "bg-zinc-100 text-zinc-400 border-zinc-200 cursor-not-allowed" 
+                  : "bg-white text-zinc-900 border-zinc-300 hover:bg-zinc-50"
+              }`}
+            >
+              Next →
+            </button>
+            
           </div>
         )}
+
       </main>
     </div>
   );
