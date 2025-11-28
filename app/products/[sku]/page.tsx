@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Image from "next/image";
 import Link from "next/link";
+// IMPORT FIX: Navigate up 3 levels to find components
+import DynamicThumbnail from "../../components/DynamicThumbnail";
 
+// 1. UPDATE INTERFACE (Added design_data)
 interface Product {
   id: number;
   sku: string;
@@ -12,8 +14,18 @@ interface Product {
   price: string;
   description: string;
   thumbnail_url: string;
-  gallery_urls: string[]; // Array of extra images if you have them
+  gallery_urls: string[]; 
   type: string;
+  canvas_settings?: { width: number; height: number };
+  // We need to read the raw design data from the API
+  design_data?: {
+    slides: {
+      front: {
+        background_url: string; // The API sends this
+        dynamic_zones: any[];
+      };
+    };
+  };
 }
 
 export default function ProductDetailsPage() {
@@ -22,13 +34,11 @@ export default function ProductDetailsPage() {
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Get SKU from the URL (e.g. /products/PC-001 -> params.sku = PC-001)
   const sku = params.sku;
 
   useEffect(() => {
     if (!sku) return;
 
-    // 1. Fetch Single Product Data
     fetch(`http://127.0.0.1:8000/api/products/${sku}`)
       .then((res) => {
         if (!res.ok) throw new Error("Product not found");
@@ -63,6 +73,21 @@ export default function ProductDetailsPage() {
     );
   }
 
+  // ✅ 2. PREPARE DATA FOR DYNAMIC THUMBNAIL
+  // The component expects { thumbnail_url, preview_zones }, but the Single Product API
+  // returns the deep 'design_data' structure. We map it here.
+  const frontSlide = product.design_data?.slides?.front;
+  
+  const thumbnailProps = {
+      id: product.id,
+      sku: product.sku,
+      title: product.title,
+      // If we removed the manual thumbnail input, we MUST use the canvas background
+      thumbnail_url: frontSlide?.background_url || product.thumbnail_url || "/placeholder.png",
+      canvas_settings: product.canvas_settings,
+      preview_zones: frontSlide?.dynamic_zones || [] 
+  };
+
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-black py-12 px-4 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl bg-white dark:bg-zinc-900 rounded-2xl shadow-sm overflow-hidden border border-zinc-200 dark:border-zinc-800">
@@ -71,27 +96,26 @@ export default function ProductDetailsPage() {
           
           {/* LEFT: Product Image Section */}
           <div className="relative bg-zinc-100 dark:bg-zinc-800 p-8 flex items-center justify-center min-h-[400px] md:min-h-[600px]">
-             {/* Back Button */}
              <Link 
                 href="/" 
-                className="absolute top-6 left-6 text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white flex items-center gap-2 transition"
+                className="absolute top-6 left-6 text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white flex items-center gap-2 transition z-20"
              >
                 ← Back
              </Link>
 
-            <div className="relative w-full max-w-md aspect-[3/4] shadow-xl rotate-1 transition hover:rotate-0 duration-500">
-              <img
-                src={product.thumbnail_url}
-                alt={product.title}
-                className="w-full h-full object-cover rounded-lg"
-              />
+            <div className="relative w-full max-w-md shadow-xl rotate-1 transition hover:rotate-0 duration-500">
+              
+              <div className="w-full h-full rounded-lg overflow-hidden bg-white">
+                 {/* ✅ 3. PASS THE MAPPED PROPS */}
+                 <DynamicThumbnail product={thumbnailProps} />
+              </div>
+
             </div>
           </div>
 
           {/* RIGHT: Details & Actions */}
           <div className="p-8 md:p-12 flex flex-col justify-center">
             
-            {/* Category / Type Tag */}
             <div className="mb-4">
                <span className="inline-block px-3 py-1 text-xs font-semibold tracking-wider text-blue-600 uppercase bg-blue-50 rounded-full dark:bg-blue-900/30 dark:text-blue-400">
                   {product.type === 'fixed' ? 'Ready to Ship' : 'Personalised Card'}
@@ -113,10 +137,7 @@ export default function ProductDetailsPage() {
               <p>{product.description || "A beautiful high-quality greeting card printed on premium 300gsm stock."}</p>
             </div>
 
-            {/* ACTION AREA */}
             <div className="mt-auto space-y-4 pt-6 border-t border-zinc-100 dark:border-zinc-800">
-                
-                {/* 1. If it's a customizable card -> Show Personalize Button */}
                 {product.type !== 'fixed' ? (
                   <button
                     onClick={() => router.push(`/editor/${product.sku}`)}
@@ -125,7 +146,6 @@ export default function ProductDetailsPage() {
                     ✏️ Personalize This Card
                   </button>
                 ) : (
-                  // 2. If it's fixed -> Just "Add to Cart" (You can implement cart logic later)
                   <button 
                     className="w-full py-4 px-6 bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-lg rounded-xl transition dark:bg-white dark:text-black dark:hover:bg-zinc-200"
                   >

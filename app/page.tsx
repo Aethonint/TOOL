@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+// ✅ IMPORT FIX: Navigate up one level to find components
+import DynamicThumbnail from "./components/DynamicThumbnail"; 
 
 interface Product {
   id: number;
@@ -12,6 +14,9 @@ interface Product {
   discount_price: string | null;
   thumbnail_url: string; 
   type: string;
+  // Dynamic Thumbnail needs these:
+  canvas_settings?: { width: number; height: number }; 
+  preview_zones?: any[];
 }
 
 export default function Home() {
@@ -25,24 +30,16 @@ export default function Home() {
   // FETCH FUNCTION
   const fetchProducts = (page: number) => {
     setLoading(true);
-    // Append ?page=X to the URL
     fetch(`http://127.0.0.1:8000/api/products?page=${page}`)
       .then((res) => {
         if (!res.ok) throw new Error("Failed");
         return res.json();
       })
       .then((data) => {
-        // Laravel Pagination Response Structure:
-        // data.data = Array of products
-        // data.last_page = Total number of pages
-        // data.current_page = Current page number
-        
         setProducts(data.data || []);
         setLastPage(data.last_page || 1);
         setCurrentPage(data.current_page || 1);
         setLoading(false);
-        
-        // Scroll to top when page changes
         window.scrollTo({ top: 0, behavior: 'smooth' });
       })
       .catch((error) => {
@@ -95,14 +92,14 @@ export default function Home() {
                 key={product.id}
                 className="group relative flex flex-col overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm transition-all hover:shadow-lg dark:border-zinc-800 dark:bg-zinc-900"
               >
-                {/* Thumbnail */}
-                <div className="relative aspect-[3/4] w-full overflow-hidden bg-zinc-100 dark:bg-zinc-800">
-                  <img
-                    src={product.thumbnail_url || "/placeholder.png"} 
-                    alt={product.title}
-                    className="w-full h-full object-cover object-center transition-transform duration-300 group-hover:scale-105"
-                  />
-                  <span className="absolute top-2 left-2 rounded-full bg-black/70 px-3 py-1 text-xs font-medium text-white backdrop-blur-sm">
+                {/* ✅ REPLACED STATIC IMAGE WITH DYNAMIC THUMBNAIL */}
+                <div className="relative w-full bg-zinc-100 dark:bg-zinc-800">
+                  
+                  {/* The Live Preview Component */}
+                  <DynamicThumbnail product={product} />
+
+                  {/* Badge Overlay (Z-Index ensures it stays on top) */}
+                  <span className="absolute top-2 left-2 z-10 rounded-full bg-black/70 px-3 py-1 text-xs font-medium text-white backdrop-blur-sm">
                     {product.type === "fixed" ? "Ready-made" : "Customizable"}
                   </span>
                 </div>
@@ -117,6 +114,9 @@ export default function Home() {
                       £{parseFloat(product.price).toFixed(2)}
                     </span>
                   </div>
+                  
+                  
+
                   <div className="mt-auto pt-4">
                     <Link
                       href={`/products/${product.sku}`}
@@ -135,7 +135,6 @@ export default function Home() {
         {!loading && products.length > 0 && (
           <div className="mt-16 flex items-center justify-center gap-4">
             
-            {/* Previous Button */}
             <button
               onClick={() => fetchProducts(currentPage - 1)}
               disabled={currentPage === 1}
@@ -152,7 +151,6 @@ export default function Home() {
               Page {currentPage} of {lastPage}
             </span>
 
-            {/* Next Button */}
             <button
               onClick={() => fetchProducts(currentPage + 1)}
               disabled={currentPage === lastPage}

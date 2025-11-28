@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useLayoutEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 
+
 // --- 1. TYPES (Matching your JSON) ---
 interface Zone {
   id: number | string;
