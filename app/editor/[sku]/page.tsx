@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useLayoutEffect } from "react";
-import { useParams } from "next/navigation";
+import { useParams , useRouter } from "next/navigation";
 import Link from "next/link";
 
 // --- TYPES ---
@@ -47,9 +47,9 @@ interface ProductData {
   };
 }
 
-// --- CONSTANTS: HANDWRITING FONTS ---
+// --- CONSTANTS ---
 const HANDWRITING_FONTS = [
-    { name: 'Standard', family: '' }, // Uses Admin Font
+    { name: 'Standard', family: '' }, 
     { name: 'Caveat', family: 'Caveat' },
     { name: 'Indie Flower', family: 'Indie Flower' },
     { name: 'Patrick Hand', family: 'Patrick Hand' },
@@ -69,11 +69,12 @@ const ProtectedImage = ({ url }: { url: string | null }) => {
   return (
     <div className="absolute inset-0 w-full h-full select-none pointer-events-none">
         <div className="absolute inset-0 w-full h-full bg-cover bg-center bg-no-repeat" style={{ backgroundImage: `url('${url}')` }} />
+        <div className="absolute inset-0 w-full h-full bg-transparent z-0" onContextMenu={(e) => e.preventDefault()} />
     </div>
   );
 };
 
-// --- 2. AUTO-FIT TEXT ZONE (With Handwriting & Style Overrides) ---
+// --- 2. TEXT ZONE (FIXED FOR FULL HEIGHT & NO SHRINK) ---
 const AutoFitTextZone = ({ 
     zone, value, onChange, onFocus, userStyle 
 }: { 
@@ -81,34 +82,18 @@ const AutoFitTextZone = ({
     userStyle?: { fontFamily?: string, color?: string } 
 }) => {
   const textRef = useRef<HTMLTextAreaElement>(null);
-  const [currentFontSize, setCurrentFontSize] = useState(zone.fontSize || 32);
   const [isFocused, setIsFocused] = useState(false);
 
-  const isBigZone = zone.height > 200;
-  const verticalAlign = isBigZone ? 'flex-start' : 'center';
+  // LOGIC: If height > 150px, treat as Message Body (Full Height). Else Title (Auto Fit).
+  const isMessageBody = zone.height > 150;
 
-  // Determine Font & Color (User Override > Admin Default)
+  // Use Admin Font Size (Fixed) or User Override
   const activeFont = userStyle?.fontFamily || (zone.fontFamily ? zone.fontFamily.replace(/['"]/g, "").split(",")[0] : "Arial");
   const activeColor = userStyle?.color || zone.color || "#000";
+  const fontSize = zone.fontSize || 32;
 
-  useLayoutEffect(() => {
-    const el = textRef.current;
-    if (!el) return;
-    el.style.fontSize = `${zone.fontSize}px`;
-    el.style.height = 'auto'; 
-    let size = zone.fontSize || 32;
-    const minSize = 10; 
-    while ((el.scrollHeight > zone.height || el.scrollWidth > zone.width) && size > minSize) {
-      size--;
-      el.style.fontSize = `${size}px`;
-    }
-    setCurrentFontSize(size);
-  }, [value, zone.width, zone.height, zone.fontSize, activeFont]); // Re-calc if font changes
-
-  const textAlign = zone.textAlign || (isBigZone ? 'left' : 'center');
-  let alignItems = 'center'; 
-  if (textAlign === 'left') alignItems = 'flex-start';
-  if (textAlign === 'right') alignItems = 'flex-end';
+  // Horizontal Alignment (Left for body, Center for titles usually)
+  const textAlign = zone.textAlign || (isMessageBody ? 'left' : 'center');
 
   return (
     <div
@@ -116,35 +101,64 @@ const AutoFitTextZone = ({
         position: "absolute", left: `${zone.x}px`, top: `${zone.y}px`, width: `${zone.width}px`, height: `${zone.height}px`,
         transform: `rotate(${zone.rotation}deg)`, zIndex: 20,
         backgroundColor: zone.backgroundColor && zone.backgroundColor !== "transparent" ? zone.backgroundColor : "rgba(255, 255, 255, 0.01)", 
-        display: 'flex', flexDirection: 'column', justifyContent: verticalAlign, alignItems: alignItems, 
-        padding: isBigZone ? '20px' : '0px', overflow: 'hidden'       
+        
+        // FLEXBOX LAYOUT
+        display: 'flex', 
+        flexDirection: 'column', 
+        // If Body: Top Align. If Title: Center Align.
+        justifyContent: isMessageBody ? 'flex-start' : 'center', 
+        
+        // Add padding so text doesn't hit edges
+        padding: isMessageBody ? '15px' : '0px',
+        overflow: 'visible' // Allow badges to show outside       
       }}
-      className={`group cursor-text transition-all duration-200 ${isFocused ? "border-2 border-blue-500/50 ring-4 ring-blue-500/10" : "border-2 border-dashed border-blue-300/60 hover:border-blue-500"}`}
+      className={`group cursor-text transition-all duration-200 ${isFocused ? "border-2 border-blue-500 ring-4 ring-blue-500/10" : "border-2 border-dashed border-blue-300/60 hover:border-blue-500"}`}
       onClick={() => { textRef.current?.focus(); }}
     >
-      <div className={`absolute -top-3 -left-3 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs font-bold shadow-sm z-30 pointer-events-none transition-opacity duration-200 ${isFocused || value.length > 0 ? 'opacity-0' : 'opacity-100'}`}>T</div>
+      {/* "T" INDICATOR (Top Left) */}
+      <div className={`absolute -top-3 -left-3 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs font-bold shadow-sm z-30 pointer-events-none transition-opacity duration-200 ${isFocused || value.length > 0 ? 'opacity-0' : 'opacity-100'}`}>
+        T
+      </div>
+
+      {/* CHARACTER COUNTER (Top Right - Always Visible when focused) */}
+      {isFocused && zone.maxChars && (
+          <div className="absolute -top-6 right-0 bg-black/80 text-white text-[10px] px-2 py-0.5 rounded shadow-sm z-30 pointer-events-none">
+             {value.length} / {zone.maxChars}
+          </div>
+      )}
       
       <textarea
-        ref={textRef} value={value} rows={isBigZone ? 4 : 1}
+        ref={textRef} 
+        value={value} 
+        
+        // If message body, occupy full height. If title, 1 row.
+        rows={isMessageBody ? 10 : 1} 
+        
         onFocus={() => { setIsFocused(true); onFocus(); }} 
         onBlur={() => setIsFocused(false)}
-        spellCheck={true} // ✅ UX POLISH: Spell check enabled
+        spellCheck={false}
         onChange={(e) => { if (zone.maxChars && e.target.value.length > zone.maxChars) return; onChange(e.target.value); }}
         placeholder={zone.text || "Click to type"}
-        className="resize-none outline-none bg-transparent p-1 w-full"
+        
+        className="resize-none outline-none bg-transparent w-full border-none p-0 m-0"
+        
         style={{
           fontFamily: activeFont, 
-          fontSize: `${currentFontSize}px`, 
+          fontSize: `${fontSize}px`, // Fixed Admin Size
           fontWeight: (zone.fontWeight as any) || "normal",
           color: activeColor, 
           textAlign: textAlign, 
-          lineHeight: 1.2,
-          height: isBigZone ? '100%' : 'auto', 
-          maxHeight: '100%', 
+          lineHeight: 1.3,
+          
+          // FULL HEIGHT & WIDTH
+          width: '100%', 
+          height: isMessageBody ? '100%' : 'auto', 
+          
+          // No Scrollbars visually
+          overflow: 'hidden',
           whiteSpace: 'pre-wrap', 
         }}
       />
-      <div className={`absolute -bottom-6 right-0 bg-black text-white text-[10px] px-1 rounded transition-opacity duration-200 pointer-events-none z-50 ${isFocused ? 'opacity-100' : 'opacity-0'}`}>{value.length} / {zone.maxChars}</div>
     </div>
   );
 };
@@ -171,55 +185,33 @@ const PageContent = ({ slide, userInputs, setUserInputs, userStyles, activeZoneI
     </>
 );
 
-// --- 4. TOOLBAR COMPONENT (New Feature) ---
+// --- 4. TOOLBAR ---
 const FloatingToolbar = ({ activeZoneId, userStyles, setUserStyles }: any) => {
     if (!activeZoneId) return null;
-
     const currentStyle = userStyles[activeZoneId] || {};
-
     const handleStyleChange = (key: string, value: string) => {
-        setUserStyles((prev: any) => ({
-            ...prev,
-            [activeZoneId]: { ...prev[activeZoneId], [key]: value }
-        }));
+        setUserStyles((prev: any) => ({ ...prev, [activeZoneId]: { ...prev[activeZoneId], [key]: value } }));
     };
 
     return (
         <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-white dark:bg-zinc-800 shadow-2xl rounded-2xl px-6 py-3 flex items-center gap-6 z-[100] border border-zinc-200 dark:border-zinc-700 animate-slide-up">
-            {/* Font Picker */}
             <div className="flex flex-col gap-1">
-                <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">Handwriting</span>
-                <select 
-                    className="bg-zinc-100 dark:bg-zinc-700 text-sm rounded px-2 py-1 outline-none border-none focus:ring-2 ring-blue-500"
-                    value={currentStyle.fontFamily || ''}
-                    onChange={(e) => handleStyleChange('fontFamily', e.target.value)}
-                >
-                    {HANDWRITING_FONTS.map(f => (
-                        <option key={f.name} value={f.family} style={{ fontFamily: f.family || 'inherit' }}>{f.name}</option>
-                    ))}
+                <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">Font</span>
+                <select className="bg-zinc-100 dark:bg-zinc-700 text-sm rounded px-2 py-1 outline-none border-none focus:ring-2 ring-blue-500" value={currentStyle.fontFamily || ''} onChange={(e) => handleStyleChange('fontFamily', e.target.value)}>
+                    {HANDWRITING_FONTS.map(f => ( <option key={f.name} value={f.family} style={{ fontFamily: f.family || 'inherit' }}>{f.name}</option> ))}
                 </select>
             </div>
-
             <div className="w-[1px] h-8 bg-zinc-200 dark:bg-zinc-600"></div>
-
-            {/* Color Picker */}
             <div className="flex flex-col gap-1">
-                <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">Ink Color</span>
+                <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">Color</span>
                 <div className="flex gap-2">
-                    {INK_COLORS.map(c => (
-                        <button
-                            key={c.name}
-                            onClick={() => handleStyleChange('color', c.value)}
-                            className={`w-6 h-6 rounded-full border-2 transition-all ${currentStyle.color === c.value ? 'border-blue-500 scale-110' : 'border-transparent hover:scale-110'}`}
-                            style={{ backgroundColor: c.value }}
-                            title={c.name}
-                        />
-                    ))}
+                    {INK_COLORS.map(c => ( <button key={c.name} onClick={() => handleStyleChange('color', c.value)} className={`w-6 h-6 rounded-full border-2 transition-all ${currentStyle.color === c.value ? 'border-blue-500 scale-110' : 'border-transparent hover:scale-110'}`} style={{ backgroundColor: c.value }} title={c.name} /> ))}
                 </div>
             </div>
         </div>
     );
 };
+
 
 // --- 5. LOADING SCREEN ---
 const LoadingScreen = () => (
@@ -229,14 +221,17 @@ const LoadingScreen = () => (
         <p className="text-sm text-zinc-500 mt-2">Loading fonts & assets</p>
     </div>
 );
+// ... (Keep all the components above like ProtectedImage, AutoFitTextZone, etc.) ...
 
-
+// --- 5. MAIN COMPONENT ---
 export default function EditorPage() {
   const params = useParams();
+  const router = useRouter(); // ✅ 1. INITIALIZE ROUTER HERE
+  
   const [product, setProduct] = useState<ProductData | null>(null);
   
   // STATE
-  const [loading, setLoading] = useState(true); // Initial Load
+  const [loading, setLoading] = useState(true);
   const [viewState, setViewState] = useState<'front' | 'inner' | 'back'>('front');
   const [userInputs, setUserInputs] = useState<Record<string, string>>({});
   const [userStyles, setUserStyles] = useState<Record<string, { fontFamily?: string, color?: string }>>({});
@@ -248,24 +243,20 @@ export default function EditorPage() {
   useEffect(() => {
     if (!params.sku) return;
 
-    // Simulate 3-sec loading for UX
     const timer = setTimeout(() => {
         fetch(`http://127.0.0.1:8000/api/products/${params.sku}`)
         .then((res) => res.json())
         .then((data) => {
             setProduct(data);
-            
-            // 💾 RESTORE DRAFT FROM LOCAL STORAGE
             const savedDraft = localStorage.getItem(`draft_${params.sku}`);
             if (savedDraft) {
                 const parsed = JSON.parse(savedDraft);
                 setUserInputs(parsed.inputs || {});
                 setUserStyles(parsed.styles || {});
             }
-            
             setLoading(false);
         });
-    }, 2000); // 2 Seconds forced wait
+    }, 2000); 
 
     return () => clearTimeout(timer);
   }, [params.sku]);
@@ -280,29 +271,25 @@ export default function EditorPage() {
       }
   }, [userInputs, userStyles, product, loading, params.sku]);
 
-  // 3. LOAD FONTS (Standard + Handwriting)
+  // 3. LOAD FONTS
   useEffect(() => {
     if (!product) return;
-    
-    // Load Admin Fonts
     const slides = product.design_data?.slides;
     const allZones = [...slides.front.dynamic_zones, ...slides.left_inner.dynamic_zones, ...slides.right_inner.dynamic_zones, ...slides.back.dynamic_zones];
     allZones.forEach((zone) => {
-      if (zone.fontFamily) loadGoogleFont(zone.fontFamily);
+      if (zone.fontFamily) {
+        const cleanFont = zone.fontFamily.replace(/['"]/g, "").split(",")[0].trim();
+        const link = document.createElement("link");
+        link.href = `https://fonts.googleapis.com/css2?family=${cleanFont.replace(/ /g, "+")}&display=swap`;
+        link.rel = "stylesheet";
+        if (!document.querySelector(`link[href="${link.href}"]`)) document.head.appendChild(link);
+      }
     });
-
-    // Load Handwriting Fonts
-    HANDWRITING_FONTS.forEach(f => { if(f.family) loadGoogleFont(f.family); });
-
+    HANDWRITING_FONTS.forEach(f => { if(f.family) { 
+        const link = document.createElement("link"); link.href = `https://fonts.googleapis.com/css2?family=${f.family.replace(/ /g, "+")}&display=swap`; link.rel = "stylesheet"; 
+        if (!document.querySelector(`link[href="${link.href}"]`)) document.head.appendChild(link);
+    }});
   }, [product]);
-
-  const loadGoogleFont = (fontName: string) => {
-      const cleanFont = fontName.replace(/['"]/g, "").split(",")[0].trim();
-      const link = document.createElement("link");
-      link.href = `https://fonts.googleapis.com/css2?family=${cleanFont.replace(/ /g, "+")}&display=swap`;
-      link.rel = "stylesheet";
-      if (!document.querySelector(`link[href="${link.href}"]`)) document.head.appendChild(link);
-  };
 
   // 4. RESIZE LOGIC
   useEffect(() => {
@@ -318,7 +305,18 @@ export default function EditorPage() {
     window.addEventListener("resize", handleResize);
     setTimeout(handleResize, 100); 
     return () => window.removeEventListener("resize", handleResize);
-  }, [product, viewState]);
+  }, [product, viewState, loading]);
+
+  // ✅ 5. HANDLE PROCEED BUTTON
+  const handleProceed = () => {
+      // Force save before navigating
+      localStorage.setItem(`draft_${params.sku}`, JSON.stringify({
+          inputs: userInputs,
+          styles: userStyles
+      }));
+      // Navigate to preview page
+      router.push(`/preview/${params.sku}`);
+  };
 
   if (loading) return <LoadingScreen />;
   if (!product) return <div className="p-20 text-center">Product not found</div>;
@@ -339,48 +337,36 @@ export default function EditorPage() {
             <button onClick={() => setViewState('inner')} className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${viewState === 'inner' ? 'bg-blue-600 text-white shadow' : 'text-zinc-500 hover:bg-zinc-100'}`}>INSIDE</button>
             <button onClick={() => setViewState('back')} className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${viewState === 'back' ? 'bg-blue-600 text-white shadow' : 'text-zinc-500 hover:bg-zinc-100'}`}>BACK</button>
         </div>
-        <button className="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-full font-bold shadow-lg text-sm transition transform active:scale-95" onClick={() => alert("Proceed to Cart")}>Add to Basket</button>
+        
+        {/* ✅ UPDATED BUTTON */}
+        <button 
+            className="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-full font-bold shadow-lg text-sm transition transform active:scale-95" 
+            onClick={handleProceed}
+        >
+            Preview & Continue
+        </button>
       </div>
 
       <div ref={containerRef} className="w-full flex justify-center items-center perspective-container" style={{ height: `${height * scale + 60}px` }}>
-        
-        <div 
-            className="relative transition-all duration-700 ease-[cubic-bezier(0.25,0.8,0.25,1)]"
-            style={{
-                width: `${width}px`, height: `${height}px`,
-                transform: `scale(${scale}) translateX(${isInner ? '50%' : '0%'}) rotateY(${isBack ? '-180deg' : '0deg'})`, 
-                transformStyle: "preserve-3d",
-            }}
-            onClick={(e) => e.stopPropagation()} // Prevent clicking canvas clearing selection
+        <div className="relative transition-all duration-700 ease-[cubic-bezier(0.25,0.8,0.25,1)]"
+            style={{ width: `${width}px`, height: `${height}px`, transform: `scale(${scale}) translateX(${isInner ? '50%' : '0%'}) rotateY(${isBack ? '-180deg' : '0deg'})`, transformStyle: "preserve-3d" }}
+            onClick={(e) => e.stopPropagation()}
         >
-            {/* LEAF 1: COVER */}
-            <div 
-                className="absolute inset-0 origin-left transition-transform duration-700 ease-[cubic-bezier(0.25,0.8,0.25,1)]"
-                style={{ transformStyle: "preserve-3d", transform: isInner ? 'rotateY(-180deg)' : 'rotateY(0deg)', zIndex: coverZ }}
-            >
-                {/* Front */}
+            <div className="absolute inset-0 origin-left transition-transform duration-700 ease-[cubic-bezier(0.25,0.8,0.25,1)]" style={{ transformStyle: "preserve-3d", transform: isInner ? 'rotateY(-180deg)' : 'rotateY(0deg)', zIndex: coverZ }}>
                 <div className="absolute inset-0 bg-white shadow-xl backface-hidden" style={{ backfaceVisibility: 'hidden', transform: 'translateZ(1px)' }}>
                     <PageContent slide={product.design_data.slides.front} userInputs={userInputs} setUserInputs={setUserInputs} userStyles={userStyles} activeZoneId={activeZoneId} setActiveZoneId={setActiveZoneId} />
                     <div className="absolute top-0 bottom-0 left-0 w-[2px] bg-gradient-to-r from-black/20 to-transparent"></div>
                 </div>
-                {/* Left Inner */}
                 <div className="absolute inset-0 bg-white shadow-md" style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg) translateZ(1px)' }}>
                     <PageContent slide={product.design_data.slides.left_inner} userInputs={userInputs} setUserInputs={setUserInputs} userStyles={userStyles} activeZoneId={activeZoneId} setActiveZoneId={setActiveZoneId} />
                     <div className="absolute top-0 bottom-0 right-0 w-8 bg-gradient-to-l from-black/10 to-transparent pointer-events-none"></div>
                 </div>
             </div>
-
-            {/* LEAF 2: BASE */}
-            <div 
-                className="absolute inset-0"
-                style={{ transformStyle: "preserve-3d", zIndex: baseZ }}
-            >
-                {/* Right Inner */}
+            <div className="absolute inset-0" style={{ transformStyle: "preserve-3d", zIndex: baseZ }}>
                 <div className="absolute inset-0 bg-white shadow-md backface-hidden" style={{ backfaceVisibility: 'hidden' }}>
                     <PageContent slide={product.design_data.slides.right_inner} userInputs={userInputs} setUserInputs={setUserInputs} userStyles={userStyles} activeZoneId={activeZoneId} setActiveZoneId={setActiveZoneId} />
                     <div className="absolute top-0 bottom-0 left-0 w-8 bg-gradient-to-r from-black/10 to-transparent pointer-events-none"></div>
                 </div>
-                {/* Back */}
                 <div className="absolute inset-0 bg-white shadow-xl" style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg) translateZ(2px)' }}>
                     <PageContent slide={product.design_data.slides.back} userInputs={userInputs} setUserInputs={setUserInputs} userStyles={userStyles} activeZoneId={activeZoneId} setActiveZoneId={setActiveZoneId} />
                 </div>
@@ -392,12 +378,7 @@ export default function EditorPage() {
 
       <div className="w-full max-w-[400px] mt-8 flex gap-4 px-4">
              {viewState === 'front' && <button onClick={() => setViewState('inner')} className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg">Open Card →</button>}
-             {viewState === 'inner' && (
-                 <>
-                    <button onClick={() => setViewState('front')} className="flex-1 py-3 bg-zinc-200 text-zinc-800 font-bold rounded-xl">← Close</button>
-                    <button onClick={() => setViewState('back')} className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg">Back of Card →</button>
-                 </>
-             )}
+             {viewState === 'inner' && ( <> <button onClick={() => setViewState('front')} className="flex-1 py-3 bg-zinc-200 text-zinc-800 font-bold rounded-xl">← Close</button> <button onClick={() => setViewState('back')} className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg">Back of Card →</button> </> )}
              {viewState === 'back' && <button onClick={() => setViewState('inner')} className="flex-1 py-3 bg-zinc-200 text-zinc-800 font-bold rounded-xl">← Turn Over</button>}
       </div>
 

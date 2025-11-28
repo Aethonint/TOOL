@@ -71,7 +71,7 @@ export default function Home() {
             Explore Our Greeting Cards
           </h1>
           <p className="text-lg text-zinc-600 dark:text-zinc-400 max-w-2xl">
-            Browse our collection and click on any card to view details.
+          Made with ❤️ by Aethon INT.
           </p>
         </div>
 
