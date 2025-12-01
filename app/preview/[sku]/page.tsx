@@ -5,6 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import ReadOnlyCard from "../../components/ReadOnlyCard"; // Import the component above
 
+
+
 export default function PreviewPage() {
   const params = useParams();
   const router = useRouter();
@@ -21,7 +23,7 @@ export default function PreviewPage() {
     if (!params.sku) return;
     
     // 1. Fetch Product Data
-    fetch(`http://127.0.0.1:8000/api/products/${params.sku}`)
+    fetch(`https://papillondashboard.devshop.site/api/products/${params.sku}`)
       .then((res) => res.json())
       .then((data) => setProduct(data));
 

@@ -244,7 +244,7 @@ export default function EditorPage() {
     if (!params.sku) return;
 
     const timer = setTimeout(() => {
-        fetch(`http://127.0.0.1:8000/api/products/${params.sku}`)
+        fetch(`https://papillondashboard.devshop.site/api/products/${params.sku}`)
         .then((res) => res.json())
         .then((data) => {
             setProduct(data);
@@ -307,7 +307,7 @@ export default function EditorPage() {
     return () => window.removeEventListener("resize", handleResize);
   }, [product, viewState, loading]);
 
-  // ✅ 5. HANDLE PROCEED BUTTON
+  
   const handleProceed = () => {
       // Force save before navigating
       localStorage.setItem(`draft_${params.sku}`, JSON.stringify({
